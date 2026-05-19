@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>就活管理ツール</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --danger: #dc2626;
+      --accent: #7c3aed;
+      --accent-hover: #6d28d9;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.75rem; }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p { color: var(--muted); font-size: .9rem; margin-top: .25rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-bottom: 1rem; }
+    .search-box { flex: 1; min-width: 180px; }
+    .search-box input, .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: .55rem .75rem; border: 1px solid var(--border);
+      border-radius: 8px; font-size: .9rem; font-family: inherit; background: var(--surface);
+    }
+    .search-box input:focus, .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+    }
+    .filter-group select {
+      padding: .55rem .75rem; border: 1px solid var(--border); border-radius: 8px;
+      font-size: .9rem; background: var(--surface);
+    }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+      padding: .55rem 1rem; border: none; border-radius: 8px;
+      font-size: .9rem; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { background: #f8fafc; }
+    .btn-danger { background: #fef2f2; color: var(--danger); border: 1px solid #fecaca; }
+    .btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+    .btn-sm { padding: .3rem .6rem; font-size: .8rem; }
+    .card {
+      background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+      border: 1px solid var(--border); overflow: hidden;
+    }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { padding: .75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: #f8fafc; font-weight: 600; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f8fafc; }
+    .memo-cell { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+    .badge { display: inline-block; padding: .2rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+    .badge-未応募 { background: #f1f5f9; color: #475569; }
+    .badge-ES { background: #dbeafe; color: #1d4ed8; }
+    .badge-面接 { background: #fef3c7; color: #b45309; }
+    .badge-内定 { background: #d1fae5; color: #047857; }
+    .badge-落選 { background: #fee2e2; color: #b91c1c; }
+    .badge-ai { background: #ede9fe; color: #6d28d9; font-size: .7rem; margin-left: .35rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .empty-state { padding: 3rem 1rem; text-align: center; color: var(--muted); }
+    .empty-state p { margin-top: .5rem; font-size: .9rem; }
+    .stats { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    .stat-chip {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+      padding: .3rem .75rem; font-size: .8rem; color: var(--muted);
+    }
+    .stat-chip strong { color: var(--text); margin-left: .25rem; }
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
+      z-index: 100; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: var(--radius);
+      box-shadow: 0 20px 50px rgba(0,0,0,.2); width: 100%; max-width: 480px;
+      padding: 1.5rem; max-height: 90vh; overflow-y: auto;
+    }
+    .modal.modal-wide { max-width: 640px; }
+    .modal h2 { font-size: 1.15rem; margin-bottom: 1.25rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: .35rem; }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1.25rem; flex-wrap: wrap; }
+    .footer-note { margin-top: 1rem; font-size: .75rem; color: var(--muted); text-align: center; }
+    .name-row { display: flex; gap: .5rem; align-items: flex-start; }
+    .name-row input { flex: 1; }
+    .ai-panel {
+      background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+      padding: 1rem; margin-bottom: 1rem; font-size: .88rem;
+    }
+    .ai-panel h3 { font-size: .8rem; color: var(--muted); margin-bottom: .35rem; font-weight: 600; }
+    .ai-panel p { margin-bottom: .75rem; white-space: pre-wrap; }
+    .ai-panel p:last-child { margin-bottom: 0; }
+    .ai-panel.empty { color: var(--muted); text-align: center; padding: 1.5rem; }
+    .ai-loading { color: var(--accent); font-size: .85rem; margin: .5rem 0 1rem; }
+    .ai-error { color: var(--danger); font-size: .85rem; margin: .5rem 0 1rem; }
+    .setup-hint {
+      background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+      padding: .75rem 1rem; font-size: .8rem; color: #92400e; margin-bottom: 1rem;
+    }
+    .detail-section { margin-bottom: 1.25rem; }
+    .detail-section h3 { font-size: .85rem; color: var(--accent); margin-bottom: .4rem; }
+    .detail-section p { font-size: .9rem; white-space: pre-wrap; }
+    .detail-meta { font-size: .8rem; color: var(--muted); margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-row">
+      <header>
+        <h1>就活管理ツール</h1>
+        <p>企業の選考状況を一覧で管理（Claude APIで企業情報を自動取得）</p>
+      </header>
+      <button type="button" class="btn btn-secondary btn-sm" id="btnSettings">⚙ API設定</button>
+    </div>
+
+    <div class="setup-hint" id="proxyHint">
+      AI機能を使うには、同じフォルダで <code>node 就活管理-proxy.js</code> を実行してから「AIで企業情報を取得」を押してください。
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="search" id="search" placeholder="企業名・業界・メモで検索…" autocomplete="off">
+      </div>
+      <div class="filter-group">
+        <select id="filterStatus" aria-label="選考状況で絞り込み">
+          <option value="">すべての状況</option>
+          <option value="未応募">未応募</option>
+          <option value="ES">ES</option>
+          <option value="面接">面接</option>
+          <option value="内定">内定</option>
+          <option value="落選">落選</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary" id="btnAdd">＋ 企業を追加</button>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>企業名</th>
+              <th>業界</th>
+              <th>選考状況</th>
+              <th>メモ</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="footer-note">※ データはブラウザ（localStorage）に保存。APIキーはPC内のみ保存されます</p>
+  </div>
+
+  <!-- 企業追加・編集 -->
+  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true">
+    <div class="modal modal-wide">
+      <h2 id="modalTitle">企業を追加</h2>
+      <form id="companyForm">
+        <input type="hidden" id="editId">
+        <div class="form-group">
+          <label for="companyName">企業名 <span style="color:var(--danger)">*</span></label>
+          <div class="name-row">
+            <input type="text" id="companyName" required placeholder="例：株式会社サンプル">
+            <button type="button" class="btn btn-accent btn-sm" id="btnFetchAi" style="white-space:nowrap">AIで取得</button>
+          </div>
+        </div>
+        <div id="aiLoading" class="ai-loading" hidden>企業情報を取得中…</div>
+        <div id="aiError" class="ai-error" hidden></div>
+        <div class="ai-panel" id="aiPanel">
+          <div class="empty" id="aiPanelEmpty">企業名を入力して「AIで取得」を押すと、概要・事業内容・就活の特徴が表示されます</div>
+          <div id="aiPanelContent" hidden>
+            <h3>企業概要</h3>
+            <p id="aiOverview"></p>
+            <h3>事業内容</h3>
+            <p id="aiBusiness"></p>
+            <h3>就活における特徴</h3>
+            <p id="aiShukatsu"></p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="industry">業界</label>
+          <input type="text" id="industry" placeholder="例：IT・通信（AI取得時に自動入力される場合があります）">
+        </div>
+        <div class="form-group">
+          <label for="status">選考状況</label>
+          <select id="status">
+            <option value="未応募">未応募</option>
+            <option value="ES">ES</option>
+            <option value="面接">面接</option>
+            <option value="内定">内定</option>
+            <option value="落選">落選</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="memo">メモ</label>
+          <textarea id="memo" placeholder="締切、志望動機のメモなど"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" id="btnCancel">キャンセル</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 企業詳細（AI情報） -->
+  <div class="modal-overlay" id="detailModal" role="dialog" aria-modal="true">
+    <div class="modal modal-wide">
+      <h2 id="detailTitle">企業詳細</h2>
+      <div id="detailBody"></div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" id="btnDetailClose">閉じる</button>
+        <button type="button" class="btn btn-primary" id="btnDetailEdit">編集</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- API設定 -->
+  <div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <h2>API設定</h2>
+      <div class="form-group">
+        <label for="apiKey">Claude APIキー</label>
+        <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off">
+        <p style="font-size:.75rem;color:var(--muted);margin-top:.35rem">AnthropicのAPIキーを入力（このPCのブラウザにのみ保存）</p>
+      </div>
+      <div class="form-group">
+        <label for="proxyUrl">プロキシURL</label>
+        <input type="text" id="proxyUrl" value="http://localhost:3456/api/company-info">
+        <p style="font-size:.75rem;color:var(--muted);margin-top:.35rem">通常は変更不要。プロキシ起動後に使用</p>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" id="btnSettingsCancel">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btnSettingsSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "shukatsu-kanri-v2";
+    const SETTINGS_KEY = "shukatsu-kanri-settings";
+    const STATUSES = ["未応募", "ES", "面接", "内定", "落選"];
+
+    let companies = loadData();
+    let currentAiInfo = null;
+
+    const tableBody = document.getElementById("tableBody");
+    const statsEl = document.getElementById("stats");
+    const searchInput = document.getElementById("search");
+    const filterStatus = document.getElementById("filterStatus");
+    const modal = document.getElementById("modal");
+    const detailModal = document.getElementById("detailModal");
+    const settingsModal = document.getElementById("settingsModal");
+    const form = document.getElementById("companyForm");
+    const modalTitle = document.getElementById("modalTitle");
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        return raw ? JSON.parse(raw) : { apiKey: "", proxyUrl: "http://localhost:3456/api/company-info" };
+      } catch {
+        return { apiKey: "", proxyUrl: "http://localhost:3456/api/company-info" };
+      }
+    }
+
+    function saveSettings(s) {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    }
+
+    function loadData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+        const old = localStorage.getItem("shukatsu-kanri-v1");
+        return old ? JSON.parse(old) : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(companies));
+    }
+
+    function uid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    function escapeHtml(str) {
+      const el = document.createElement("div");
+      el.textContent = str ?? "";
+      return el.innerHTML;
+    }
+
+    function getFiltered() {
+      const q = searchInput.value.trim().toLowerCase();
+      const status = filterStatus.value;
+      return companies.filter((c) => {
+        if (status && c.status !== status) return false;
+        if (!q) return true;
+        const ai = c.aiInfo ? [c.aiInfo.overview, c.aiInfo.business, c.aiInfo.shukatsuFeatures].join(" ") : "";
+        const hay = [c.name, c.industry, c.memo, ai].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    function renderAiPanel(info) {
+      const empty = document.getElementById("aiPanelEmpty");
+      const content = document.getElementById("aiPanelContent");
+      if (!info) {
+        empty.hidden = false;
+        content.hidden = true;
+        return;
+      }
+      empty.hidden = true;
+      content.hidden = false;
+      document.getElementById("aiOverview").textContent = info.overview || "—";
+      document.getElementById("aiBusiness").textContent = info.business || "—";
+      document.getElementById("aiShukatsu").textContent = info.shukatsuFeatures || "—";
+    }
+
+    function setAiLoading(on) {
+      document.getElementById("aiLoading").hidden = !on;
+      document.getElementById("btnFetchAi").disabled = on;
+    }
+
+    function setAiError(msg) {
+      const el = document.getElementById("aiError");
+      if (msg) {
+        el.textContent = msg;
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+    }
+
+    async function fetchCompanyInfo() {
+      const name = document.getElementById("companyName").value.trim();
+      if (!name) {
+        setAiError("先に企業名を入力してください");
+        return;
+      }
+
+      const settings = loadSettings();
+      if (!settings.apiKey) {
+        setAiError("APIキーが未設定です。「API設定」から入力してください");
+        settingsModal.classList.add("open");
+        return;
+      }
+
+      setAiError("");
+      setAiLoading(true);
+
+      try {
+        const res = await fetch(settings.proxyUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": settings.apiKey,
+          },
+          body: JSON.stringify({ companyName: name }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "取得に失敗しました");
+
+        currentAiInfo = {
+          overview: data.overview || "",
+          business: data.business || "",
+          shukatsuFeatures: data.shukatsuFeatures || "",
+          fetchedAt: new Date().toISOString(),
+        };
+        renderAiPanel(currentAiInfo);
+
+        if (!document.getElementById("industry").value.trim() && data.business) {
+          const m = data.business.match(/[（(]([^）)]+)[）)]/);
+          if (m) document.getElementById("industry").value = m[1].slice(0, 40);
+        }
+      } catch (err) {
+        const msg = err.message || "通信エラー";
+        if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+          setAiError("プロキシに接続できません。ターミナルで node 就活管理-proxy.js を実行してください");
+        } else {
+          setAiError(msg);
+        }
+      } finally {
+        setAiLoading(false);
+      }
+    }
+
+    function renderStats() {
+      const counts = Object.fromEntries(STATUSES.map((s) => [s, 0]));
+      companies.forEach((c) => { if (counts[c.status] !== undefined) counts[c.status]++; });
+      statsEl.innerHTML =
+        `<span class="stat-chip">登録数<strong>${companies.length}</strong></span>` +
+        STATUSES.map((s) => `<span class="stat-chip">${s}<strong>${counts[s]}</strong></span>`).join("");
+    }
+
+    function renderTable() {
+      const list = getFiltered();
+      if (list.length === 0) {
+        tableBody.innerHTML = `
+          <tr><td colspan="5">
+            <div class="empty-state">
+              <strong>${companies.length === 0 ? "まだ企業が登録されていません" : "該当する企業がありません"}</strong>
+              <p>${companies.length === 0 ? "「＋ 企業を追加」から登録してください" : "検索条件を変えてみてください"}</p>
+            </div>
+          </td></tr>`;
+        renderStats();
+        return;
+      }
+
+      tableBody.innerHTML = list.map((c) => `
+        <tr data-id="${c.id}">
+          <td>
+            <strong>${escapeHtml(c.name)}</strong>
+            ${c.aiInfo ? '<span class="badge badge-ai">AI</span>' : ""}
+          </td>
+          <td>${escapeHtml(c.industry) || "—"}</td>
+          <td><span class="badge badge-${escapeHtml(c.status)}">${escapeHtml(c.status)}</span></td>
+          <td class="memo-cell" title="${escapeHtml(c.memo)}">${escapeHtml(c.memo) || "—"}</td>
+          <td>
+            <div class="actions">
+              ${c.aiInfo ? `<button type="button" class="btn btn-accent btn-sm" data-detail="${c.id}">詳細</button>` : ""}
+              <button type="button" class="btn btn-secondary btn-sm" data-edit="${c.id}">編集</button>
+              <button type="button" class="btn btn-danger btn-sm" data-delete="${c.id}">削除</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+      renderStats();
+    }
+
+    function openDetail(company) {
+      document.getElementById("detailTitle").textContent = company.name;
+      const body = document.getElementById("detailBody");
+      if (!company.aiInfo) {
+        body.innerHTML = '<p style="color:var(--muted)">AI企業情報はまだ取得されていません。編集画面から取得できます。</p>';
+      } else {
+        const d = company.aiInfo.fetchedAt
+          ? new Date(company.aiInfo.fetchedAt).toLocaleString("ja-JP")
+          : "";
+        body.innerHTML = `
+          ${d ? `<p class="detail-meta">AI取得日時: ${escapeHtml(d)}</p>` : ""}
+          <div class="detail-section"><h3>企業概要</h3><p>${escapeHtml(company.aiInfo.overview)}</p></div>
+          <div class="detail-section"><h3>事業内容</h3><p>${escapeHtml(company.aiInfo.business)}</p></div>
+          <div class="detail-section"><h3>就活における特徴</h3><p>${escapeHtml(company.aiInfo.shukatsuFeatures)}</p></div>
+        `;
+      }
+      detailModal.dataset.companyId = company.id;
+      detailModal.classList.add("open");
+    }
+
+    function openModal(company = null) {
+      document.getElementById("editId").value = company?.id ?? "";
+      document.getElementById("companyName").value = company?.name ?? "";
+      document.getElementById("industry").value = company?.industry ?? "";
+      document.getElementById("status").value = company?.status ?? "未応募";
+      document.getElementById("memo").value = company?.memo ?? "";
+      currentAiInfo = company?.aiInfo ? { ...company.aiInfo } : null;
+      renderAiPanel(currentAiInfo);
+      setAiError("");
+      modalTitle.textContent = company ? "企業を編集" : "企業を追加";
+      modal.classList.add("open");
+      document.getElementById("companyName").focus();
+    }
+
+    function closeModal() {
+      modal.classList.remove("open");
+      form.reset();
+      currentAiInfo = null;
+      renderAiPanel(null);
+      setAiError("");
+    }
+
+    document.getElementById("btnAdd").addEventListener("click", () => openModal());
+    document.getElementById("btnCancel").addEventListener("click", closeModal);
+    document.getElementById("btnFetchAi").addEventListener("click", fetchCompanyInfo);
+    document.getElementById("btnSettings").addEventListener("click", () => {
+      const s = loadSettings();
+      document.getElementById("apiKey").value = s.apiKey || "";
+      document.getElementById("proxyUrl").value = s.proxyUrl || "http://localhost:3456/api/company-info";
+      settingsModal.classList.add("open");
+    });
+    document.getElementById("btnSettingsCancel").addEventListener("click", () => settingsModal.classList.remove("open"));
+    document.getElementById("btnSettingsSave").addEventListener("click", () => {
+      saveSettings({
+        apiKey: document.getElementById("apiKey").value.trim(),
+        proxyUrl: document.getElementById("proxyUrl").value.trim() || "http://localhost:3456/api/company-info",
+      });
+      settingsModal.classList.remove("open");
+      setAiError("");
+    });
+    document.getElementById("btnDetailClose").addEventListener("click", () => detailModal.classList.remove("open"));
+    document.getElementById("btnDetailEdit").addEventListener("click", () => {
+      const id = detailModal.dataset.companyId;
+      const c = companies.find((x) => x.id === id);
+      detailModal.classList.remove("open");
+      if (c) openModal(c);
+    });
+
+    [modal, detailModal, settingsModal].forEach((m) => {
+      m.addEventListener("click", (e) => { if (e.target === m) m.classList.remove("open"); });
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      modal.classList.remove("open");
+      detailModal.classList.remove("open");
+      settingsModal.classList.remove("open");
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const id = document.getElementById("editId").value;
+      const entry = {
+        name: document.getElementById("companyName").value.trim(),
+        industry: document.getElementById("industry").value.trim(),
+        status: document.getElementById("status").value,
+        memo: document.getElementById("memo").value.trim(),
+      };
+      if (!entry.name) return;
+
+      const aiInfo = currentAiInfo || undefined;
+
+      if (id) {
+        const idx = companies.findIndex((c) => c.id === id);
+        if (idx !== -1) {
+          companies[idx] = { ...companies[idx], ...entry };
+          if (aiInfo) companies[idx].aiInfo = aiInfo;
+          else delete companies[idx].aiInfo;
+        }
+      } else {
+        const row = { id: uid(), ...entry };
+        if (aiInfo) row.aiInfo = aiInfo;
+        companies.push(row);
+      }
+
+      saveData();
+      closeModal();
+      renderTable();
+    });
+
+    tableBody.addEventListener("click", (e) => {
+      const detailBtn = e.target.closest("[data-detail]");
+      const editBtn = e.target.closest("[data-edit]");
+      const delBtn = e.target.closest("[data-delete]");
+
+      if (detailBtn) {
+        const c = companies.find((x) => x.id === detailBtn.dataset.detail);
+        if (c) openDetail(c);
+      }
+      if (editBtn) {
+        const c = companies.find((x) => x.id === editBtn.dataset.edit);
+        if (c) openModal(c);
+      }
+      if (delBtn) {
+        const id = delBtn.dataset.delete;
+        const c = companies.find((x) => x.id === id);
+        if (c && confirm(`「${c.name}」を削除しますか？`)) {
+          companies = companies.filter((x) => x.id !== id);
+          saveData();
+          renderTable();
+        }
+      }
+    });
+
+    searchInput.addEventListener("input", renderTable);
+    filterStatus.addEventListener("change", renderTable);
+
+    renderTable();
+  </script>
+</body>
+</html>
