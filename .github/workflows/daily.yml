@@ -1,0 +1,32 @@
+name: Daily Job Notify
+
+on:
+  schedule:
+    # UTC 0:00 = JST 9:00
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore seen jobs database
+        uses: actions/cache@v4
+        with:
+          path: seen_jobs.db
+          key: seen-jobs-db-v1
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run notify script
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python notify.py

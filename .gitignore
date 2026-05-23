@@ -4,3 +4,4 @@ desktop.ini
 *.log
 .env
 .env.*
+seen_jobs.db
