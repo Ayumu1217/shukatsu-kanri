@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Indeed RSS を監視し、条件に合う求人を LINE Messaging API で通知する。"""
+"""Indeed RSS / Wantedly を監視し、条件に合う求人を LINE Messaging API で通知する。"""
 
 import os
 import sqlite3
@@ -28,6 +28,10 @@ RSS_FEEDS = [
     f"https://jp.indeed.com/rss?{urlencode({'q': 'ビジネス', 'l': '東京'})}",
     f"https://jp.indeed.com/rss?{urlencode({'q': 'インターン', 'l': '東京'})}",
 ]
+
+WANTEDLY_API_URL = "https://www.wantedly.com/api/v1/projects"
+WANTEDLY_SEARCH_KEYWORDS = ["AI", "ビジネス", "インターン"]
+REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -122,6 +126,60 @@ def process_feeds(channel_token: str, user_id: str) -> int:
     return notified
 
 
+def project_text(project: dict) -> str:
+    parts = [
+        project.get("title", ""),
+        project.get("looking_for", ""),
+        project.get("description", ""),
+    ]
+    company = project.get("company") or {}
+    parts.append(company.get("name", ""))
+    return "\n".join(p for p in parts if p)
+
+
+def fetch_wantedly_projects(keyword: str, page: int = 1) -> list[dict]:
+    response = requests.get(
+        WANTEDLY_API_URL,
+        params={"keyword": keyword, "page": page},
+        headers=REQUEST_HEADERS,
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response.json().get("data", [])
+
+
+def check_wantedly(channel_token: str, user_id: str) -> int:
+    """Wantedly の求人をチェックし、マッチするものを毎回 LINE 通知する（既読管理なし）。"""
+    notified = 0
+    notified_ids: set[str] = set()
+
+    for keyword in WANTEDLY_SEARCH_KEYWORDS:
+        try:
+            projects = fetch_wantedly_projects(keyword)
+        except requests.RequestException as exc:
+            print(f"警告: Wantedly 取得失敗 ({keyword}): {exc}", file=sys.stderr)
+            continue
+
+        for project in projects:
+            pid = str(project.get("id", ""))
+            if not pid or pid in notified_ids:
+                continue
+
+            if not matches(project_text(project)):
+                continue
+
+            notified_ids.add(pid)
+            title = project.get("title", "（タイトルなし）")
+            company = (project.get("company") or {}).get("name", "")
+            link = f"https://www.wantedly.com/projects/{pid}"
+            message = f"【Wantedly】\n{company}\n{title}\n{link}"
+            send_line_push(channel_token, user_id, message)
+            notified += 1
+            print(f"Wantedly通知: {title}")
+
+    return notified
+
+
 def main() -> None:
     channel_token = os.environ.get("LINE_CHANNEL_TOKEN")
     user_id = os.environ.get("LINE_USER_ID")
@@ -132,8 +190,11 @@ def main() -> None:
         print("エラー: 環境変数 LINE_USER_ID が設定されていません", file=sys.stderr)
         sys.exit(1)
 
-    count = process_feeds(channel_token, user_id)
-    print(f"完了: {count} 件を通知しました")
+    count_indeed = process_feeds(channel_token, user_id)
+    count_wantedly = check_wantedly(channel_token, user_id)
+    print(
+        f"完了: Indeed {count_indeed} 件、Wantedly {count_wantedly} 件を通知しました"
+    )
 
 
 if __name__ == "__main__":
