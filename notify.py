@@ -105,8 +105,9 @@ def is_suitable_for_user(title: str, description: str) -> bool:
         content = f"求人タイトル: {title}\n\n求人説明:\n{description[:3000]}"
         response = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=256,
+            max_tokens=1024,
             thinking={"type": "adaptive"},
+            output_config={"effort": "low"},
             system=[{
                 "type": "text",
                 "text": _AI_JUDGE_SYSTEM,
