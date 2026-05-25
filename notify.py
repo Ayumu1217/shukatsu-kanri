@@ -6,6 +6,7 @@ import sqlite3
 import sys
 from urllib.parse import urlencode
 
+import anthropic
 import feedparser
 import requests
 
@@ -28,6 +29,28 @@ RSS_FEEDS = [
     f"https://jp.indeed.com/rss?{urlencode({'q': 'ビジネス', 'l': '東京'})}",
     f"https://jp.indeed.com/rss?{urlencode({'q': 'インターン', 'l': '東京'})}",
 ]
+
+_claude_client: anthropic.Anthropic | None = None
+
+# システムプロンプト（毎回同じなのでプロンプトキャッシュを活用）
+_AI_JUDGE_SYSTEM = """\
+あなたは就職活動のアドバイザーです。
+以下のユーザープロフィールに基づき、求人がユーザーに適しているか評価してください。
+
+【ユーザープロフィール】
+- 中央大学 経済学部 2年生
+- AI・ビジネス職志望のインターン生
+- 文系バックグラウンド（プログラミングは基礎〜中級程度）
+- AI技術・ビジネス戦略・事業開発・企画・マーケティングに興味あり
+
+【評価基準】
+1. 大学生（特に文系2年生）がインターンとして参加できるか
+2. AI・ビジネス・企画・事業開発・マーケティングに関連するか
+3. 経済学部生でも対応できる職種・業務内容か
+
+【返答形式】
+1行目に「適切」または「不適切」とだけ記載し、2行目以降に判断理由を1〜2文で記載してください。\
+"""
 
 WANTEDLY_API_URL = "https://www.wantedly.com/api/v1/projects"
 WANTEDLY_SEARCH_KEYWORDS = ["AI", "ビジネス", "インターン"]
@@ -66,6 +89,38 @@ def matches(text: str) -> bool:
         if company in text or company.lower() in lower:
             return True
     return False
+
+
+def _get_claude_client() -> anthropic.Anthropic:
+    global _claude_client
+    if _claude_client is None:
+        _claude_client = anthropic.Anthropic()
+    return _claude_client
+
+
+def is_suitable_for_user(title: str, description: str) -> bool:
+    """Claude APIで求人がユーザー（中央大学経済学部2年・AI/ビジネス志望インターン）に適切か判断する。"""
+    try:
+        client = _get_claude_client()
+        content = f"求人タイトル: {title}\n\n求人説明:\n{description[:3000]}"
+        response = client.messages.create(
+            model="claude-opus-4-7",
+            max_tokens=256,
+            thinking={"type": "adaptive"},
+            system=[{
+                "type": "text",
+                "text": _AI_JUDGE_SYSTEM,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": content}],
+        )
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        result = text.strip().startswith("適切")
+        print(f"AI判定: {'✓' if result else '✗'} {title[:40]}")
+        return result
+    except anthropic.APIError as exc:
+        print(f"警告: Claude API エラー ({exc})", file=sys.stderr)
+        return True  # API障害時はキーワードマッチ済みとして通知する
 
 
 def send_line_push(channel_token: str, user_id: str, message: str) -> None:
@@ -115,6 +170,10 @@ def process_feeds(channel_token: str, user_id: str) -> int:
                 continue
 
             title = entry.get("title", "（タイトルなし）")
+            summary = entry.get("summary", "")
+            if not is_suitable_for_user(title, summary):
+                continue
+
             link = entry.get("link", "")
             message = f"【新着求人】\n{title}\n{link}"
             send_line_push(channel_token, user_id, message)
@@ -168,8 +227,15 @@ def check_wantedly(channel_token: str, user_id: str) -> int:
             if not matches(project_text(project)):
                 continue
 
-            notified_ids.add(pid)
             title = project.get("title", "（タイトルなし）")
+            description = "\n".join(filter(None, [
+                project.get("looking_for", ""),
+                project.get("description", ""),
+            ]))
+            if not is_suitable_for_user(title, description):
+                continue
+
+            notified_ids.add(pid)
             company = (project.get("company") or {}).get("name", "")
             link = f"https://www.wantedly.com/projects/{pid}"
             message = f"【Wantedly】\n{company}\n{title}\n{link}"
@@ -188,6 +254,9 @@ def main() -> None:
         sys.exit(1)
     if not user_id:
         print("エラー: 環境変数 LINE_USER_ID が設定されていません", file=sys.stderr)
+        sys.exit(1)
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("エラー: 環境変数 ANTHROPIC_API_KEY が設定されていません", file=sys.stderr)
         sys.exit(1)
 
     count_indeed = process_feeds(channel_token, user_id)
